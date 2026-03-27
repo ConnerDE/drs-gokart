@@ -95,8 +95,8 @@ enum StatusLEDMode { LED_NORMAL, LED_EMERGENCY, LED_CAN_LOSS, LED_CALIBRATION };
 #define MCP2_FERN         3    // 2/A3
 #define MCP2_ABBLEND      4    // 2/A4
 #define MCP2_TRANS2       5    // 2/A5
-#define MCP2_DRS_R        6    // 2/A6
-#define MCP2_DRS_L        7    // 2/A7
+#define MCP2_DRS_R        6    // 2/A6   DRS
+#define MCP2_DRS_L        7    // 2/A7   DRS
 #define MCP2_PIEZO        8    // 2/B0
 #define MCP2_LED          9    // 2/B1
 #define MCP2_START_BTN    10   // 2/B2
@@ -482,7 +482,7 @@ public:
 
     neutralActive = !mcp1.digitalRead(MCP1_NEUTRAL);
     oilPresent = (mcp1.digitalRead(MCP1_OIL) == LOW);
-    brakePressed = !mcp1.digitalRead(MCP1_BRAKE);
+    brakePressed = !mcp1.digitalRead(MCP1_BRAKE);   // hier evtl schalten das drs zu geht
     tiltDetected = !mcp1.digitalRead(MCP1_TILT);
 
     bool nowEmergency = !oilPresent || tiltDetected || (oilTemp > OIL_TEMP_CRITICAL && oilTemp > 0);
