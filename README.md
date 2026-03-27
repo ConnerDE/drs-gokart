@@ -12,7 +12,7 @@ Die Steuerung erfolgt über einen **ESP32-S3**, der einen Aktuator bzw. Servo an
 
 ## Hardware
 - **ESP32-S3**
-- 2x Stellmotoren
+- per Hydraulik
 - ...
 
 ## Software
