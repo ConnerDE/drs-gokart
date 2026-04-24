@@ -75,8 +75,7 @@ void loop() {
   bool systemOK = can.isAlive() && !safety.emergencyActive() && voltageOK && !overTemp;
 
   // DRS Logik
-  drsUpdate(currentSpeed, gasPedal.getThrottle(), safety.brakePressed, safety.currentRPM, systemOK);
-
+  drsUpdate(currentSpeed, gasPedal.getThrottle(), safety.brakePressed, safety.currentRPM, systemOK, safety.oilTemp, safety.batteryVoltage);
   // Output mit HARD Failsafe
   bool drsActive = isDRSActive() && !safety.brakePressed;
 

@@ -37,6 +37,12 @@ class BLECallbacks : public BLECharacteristicCallbacks {
       } else if (s.startsWith("SPD:")) {
         currentSpeed = s.substring(4).toFloat();
       }
+      // DRS Show Mode
+      else if (s == "DRS:SHOW_ON") {
+        drsShowMode = true;
+      } else if (s == "DRS:SHOW_OFF") {
+        drsShowMode = false;
+      }
     }
   }
 };
@@ -93,4 +99,8 @@ void sendTelemetry(SafetyModule& safety, CanReceiver& can, GasPedal& gas, int8_t
   serializeJson(doc, json);
   pCharacteristic->setValue(json.c_str());
   pCharacteristic->notify();
+
+  doc["drs"]      = (uint8_t)getDRSState();  // 0=Disabled, 1=Armed, 2=Active
+  doc["drsShow"]  = drsShowMode;
 }
+
