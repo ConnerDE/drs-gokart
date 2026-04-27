@@ -2,7 +2,7 @@
 /* ==================== BLE ==================== */
 class BLECallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *pChar) override {
-    std::string value = pChar->getValue();
+    String value = pChar->getValue();
     if (value.length() > 0) {
       String s = String(value.c_str());
 
@@ -39,9 +39,9 @@ class BLECallbacks : public BLECharacteristicCallbacks {
       }
       // DRS Show Mode
       else if (s == "DRS:SHOW_ON") {
-        drsShowMode = true;
+        setDRSShowMode(true);
       } else if (s == "DRS:SHOW_OFF") {
-        drsShowMode = false;
+        setDRSShowMode(false);
       }
     }
   }
