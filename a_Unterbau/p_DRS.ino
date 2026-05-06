@@ -59,3 +59,8 @@ bool isDRSActive()     { return drsState == DRS_Active; }
 bool isDRSArmed()      { return drsState == DRS_Armed; }
 bool isDRSAllowed()    { return lastAllowed; }
 
+// Setter
+
+void setDRS(bool active) {
+  drsState = active ? DRS_Active : DRS_Disabled;
+}

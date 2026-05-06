@@ -12,7 +12,7 @@ static float DRS_MAX_BRAKE = 0.0; // 0.0 ist kein Bremsdruck
 
 // Show Mode
 
-static bool drsShowMode = false;
+bool drsShowMode = false;
 
 void setDRSShowMode(bool val) { 
   drsShowMode = val; 

@@ -56,6 +56,74 @@ enum StatusLEDMode { LED_NORMAL, LED_EMERGENCY, LED_CAN_LOSS, LED_CALIBRATION };
 #define LEDC_SERVO_RES       LEDC_TIMER_13_BIT
 #define LEDC_SERVO_DUTY_MAX  8191
 
+// PIN DEFINITIONS (aus b_PIN-Def)
+#define PIN_BATTERY_ADC       1
+#define PIN_EXHAUST_SERVO     2
+#define PIN_OIL_TEMP          4
+#define PIN_TMC_EN            5
+#define PIN_TMC_UART          6
+#define PIN_RPM_HALL          7
+#define PIN_I2C_SDA           8
+#define PIN_I2C_SCL           9
+#define PIN_CAN_RX            10
+#define PIN_CAN_TX            11
+#define PIN_LED_SPOILER       12
+#define PIN_TMC_STEP          13
+#define PIN_TMC_DIR           14
+#define PIN_LED_HECK_HL       15
+#define PIN_LED_HECK_HR       16
+#define PIN_LED_FRONT_VL      17
+#define PIN_LED_FRONT_VR      18
+#define PIN_GAS_SERVO         43
+#define PIN_START_LED         44
+
+// LED CONFIG (aus c_LED-Config)
+#define NUM_FRONT_LEDS        50
+#define NUM_HECK_HL           22
+#define NUM_HECK_HR           22
+#define NUM_SPOILER           187
+#define BLINKER_OUTER_LEDS    35
+#define SPOILER_BLINKER_LEFT  0
+#define SPOILER_BLINKER_RIGHT 152
+#define SPOILER_CENTER_START  80
+#define SPOILER_CENTER_LEN    27
+
+// TMC2209 CONFIG (aus d_)
+#define R_SENSE               0.11f
+#define STALL_VALUE           150
+#define DRIVER_ADDRESS        0b00
+
+// OLED CONFIG (aus e_)
+#define SCREEN_WIDTH          128
+#define SCREEN_HEIGHT         64
+#define OLED_RESET            -1
+#define SCREEN_ADDRESS        0x3C
+
+// MCP23017 MAPPING (aus f_)
+#define MCP1_ADDR             0x20
+#define MCP2_ADDR             0x21
+#define MCP1_USB_TASTER       0
+#define MCP1_PEDAL_ENC_A      1
+#define MCP1_PEDAL_ENC_B      6
+#define MCP1_NEUTRAL          8
+#define MCP1_OIL              9
+#define MCP1_BRAKE            10
+#define MCP1_TILT             13
+#define MCP2_TRANS3           0
+#define MCP2_USB_TRANS        1
+#define MCP2_TRANS1           2
+#define MCP2_FERN             3
+#define MCP2_ABBLEND          4
+#define MCP2_TRANS2           5
+#define MCP2_DRS_R            6
+#define MCP2_DRS_L            7
+#define MCP2_PIEZO            8
+#define MCP2_LED              9
+#define MCP2_START_BTN        10
+#define MCP2_ENDSTOP_R        11
+#define MCP2_HUPE             14
+#define MCP2_ZUENDUNG         15
+
 /* ==================== EEPROM KEYS ==================== */
 #define PREF_NAMESPACE    "esp2"
 #define PREF_GEAR         "gear"
@@ -74,17 +142,6 @@ enum StatusLEDMode { LED_NORMAL, LED_EMERGENCY, LED_CAN_LOSS, LED_CALIBRATION };
 Adafruit_MCP23X17 mcp1, mcp2;
 Adafruit_AHTX0 aht20;
 Adafruit_BMP280 bmp280;
-OneWire oneWire(PIN_OIL_TEMP);
-DallasTemperature ds18b20(&oneWire);
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-Preferences prefs;
-TMC2209Stepper driver(&Serial1, R_SENSE, DRIVER_ADDRESS);
-
-CRGB ledsFrontVL[NUM_FRONT_LEDS];
-CRGB ledsFrontVR[NUM_FRONT_LEDS];
-CRGB ledsHeckHL[NUM_HECK_HL];
-CRGB ledsHeckHR[NUM_HECK_HR];
-CRGB ledsSpoiler[NUM_SPOILER];
 
 BLEServer* pServer = nullptr;
 BLECharacteristic* pCharacteristic = nullptr;
@@ -107,12 +164,6 @@ int calSrvExhMin = 0;
 int calSrvExhMax = 180;
 
 /* ==================== INSTANCES ==================== */
-RPMCounter rpm;
-CanReceiver can;
-SafetyModule safety;
-Gearbox gearbox;
-GasPedal gasPedal;
-LightsManager lights;
 
 bool blinkerLeftState = false;
 bool blinkerRightState = false;

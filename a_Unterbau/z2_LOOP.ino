@@ -72,10 +72,12 @@ void loop() {
   lastDRSButton = currentDRSButton;
 
   // System OK (minimal, später erweitern)
-  bool systemOK = can.isAlive() && !safety.emergencyActive() && voltageOK && !overTemp;
+  bool voltageOK = safety.batteryVoltage > BATTERY_CUTOFF;
+  bool overTemp  = safety.oilTemp > OIL_TEMP_CRITICAL;
+  bool systemOK  = can.isAlive() && !safety.isEmergencyActive() && voltageOK && !overTemp;
 
   // DRS Logik
-  drsUpdate(currentSpeed, gasPedal.getThrottle(), safety.brakePressed, safety.currentRPM, systemOK, safety.oilTemp, safety.batteryVoltage);
+  drsUpdate(currentSpeed, gasPedal.getGasPercent(), safety.brakePressed, safety.currentRPM, systemOK, safety.oilTemp, safety.batteryVoltage);
   // Output mit HARD Failsafe
   bool drsActive = isDRSActive() && !safety.brakePressed;
 
