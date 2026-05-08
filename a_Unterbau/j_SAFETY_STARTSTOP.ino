@@ -30,7 +30,7 @@ public:
     if (ds18b20.getDeviceCount() > 0) i2cStatus |= (1 << 5);
 
     if (aht20.begin()) i2cStatus |= (1 << 2);
-    if (bmp280.begin(0x76)) i2cStatus |= (1 << 3);
+    if (bmp280.begin(0x77)) i2cStatus |= (1 << 3);
 
     pinMode(PIN_START_LED, OUTPUT);
 

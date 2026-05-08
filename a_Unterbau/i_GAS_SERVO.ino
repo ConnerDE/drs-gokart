@@ -81,6 +81,13 @@ public:
 
     uint32_t pulseWidth_us = map(targetAngle, 0, 180, 1000, 2000);
     uint32_t duty = (uint32_t)((pulseWidth_us * (uint64_t)LEDC_SERVO_DUTY_MAX) / 20000ULL);
+
+    // Drehzahlbegrenzer
+    uint16_t rpmLimit = safety.neutralActive ? 4500 : 4100;
+    if (currentRPM >= rpmLimit) {
+      targetAngle = calSrvGasMin;
+    }
+
     ledc_set_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH, duty);
     ledc_update_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH);
   }
