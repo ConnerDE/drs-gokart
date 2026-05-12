@@ -1,103 +1,118 @@
 /* ==================== LOOP ==================== */
 void loop() {
-esp_task_wdt_reset();  // Feed the watchdog
-can.update();
-rpm.update();
-safety.currentRPM = rpm.getRPM();
-safety.update();
+  esp_task_wdt_reset();
+
+  can.update();
+  rpm.update();
+  safety.currentRPM = rpm.getRPM();
+  safety.update();
+
+  // Kalibrierung beim Start — Servo bleibt still
+  if (gasPedal.isCalibrating()) {
+    gasPedal.updateCalibration();
+    return;
+  }
+
   // Blinker Logic (Comfort Blinker)
-bool bL = can.isBlinkLeft();
-bool bR = can.isBlinkRight();
-bool bW = can.isWarnBlink();
-if (bW && !lastWarnBtn) {
+  bool bL = can.isBlinkLeft();
+  bool bR = can.isBlinkRight();
+  bool bW = can.isWarnBlink();
+
+  if (bW && !lastWarnBtn) {
     warnBlinkState = !warnBlinkState;
-if (warnBlinkState) { blinkerLeftState = false; blinkerRightState = false; }
-}
+    if (warnBlinkState) { blinkerLeftState = false; blinkerRightState = false; }
+  }
   lastWarnBtn = bW;
-if (!warnBlinkState && bL && !lastBlinkLeftBtn) {
+
+  if (!warnBlinkState && bL && !lastBlinkLeftBtn) {
     blinkerLeftState = !blinkerLeftState;
     blinkerRightState = false;
-if (blinkerLeftState) blinkerStartTime = millis();
-}
+    if (blinkerLeftState) blinkerStartTime = millis();
+  }
   lastBlinkLeftBtn = bL;
-if (!warnBlinkState && bR && !lastBlinkRightBtn) {
+
+  if (!warnBlinkState && bR && !lastBlinkRightBtn) {
     blinkerRightState = !blinkerRightState;
     blinkerLeftState = false;
-if (blinkerRightState) blinkerStartTime = millis();
-}
+    if (blinkerRightState) blinkerStartTime = millis();
+  }
   lastBlinkRightBtn = bR;
+
   // Auto-Cancel Blinker
-if ((blinkerLeftState || blinkerRightState) && !warnBlinkState) {
-if (millis() - blinkerStartTime > 10000 || currentSpeed > 30.0) {
+  if ((blinkerLeftState || blinkerRightState) && !warnBlinkState) {
+    if (millis() - blinkerStartTime > 10000 || currentSpeed > 30.0) {
       blinkerLeftState = false;
       blinkerRightState = false;
-}
-}
+    }
+  }
+
   // Launch Control
-bool launchActive = false;
-if (safety.ignitionOn && can.isLaunch() && safety.brakePressed) {
+  bool launchActive = false;
+  if (safety.ignitionOn && can.isLaunch() && safety.brakePressed) {
     launchActive = true;
-}
-gasPedal.update(can.driveMode, launchActive, safety.currentRPM);
+  }
+
+  gasPedal.update(can.driveMode, launchActive, safety.currentRPM, safety.neutralActive);
+
   // USB Toggle (Debounced)
-static bool lastUsbTaster = true;
-static unsigned long lastUsbPress = 0;
-bool usbTasterPressed = !mcp1.digitalRead(MCP1_USB_TASTER);
-if (usbTasterPressed && !lastUsbTaster && (millis() - lastUsbPress > 200)) {
+  static bool lastUsbTaster = true;
+  static unsigned long lastUsbPress = 0;
+  bool usbTasterPressed = !mcp1.digitalRead(MCP1_USB_TASTER);
+  if (usbTasterPressed && !lastUsbTaster && (millis() - lastUsbPress > 200)) {
     usbState = !usbState;
-mcp2.digitalWrite(MCP2_USB_TRANS, usbState ? HIGH : LOW);
+    mcp2.digitalWrite(MCP2_USB_TRANS, usbState ? HIGH : LOW);
     lastUsbPress = millis();
-}
+  }
   lastUsbTaster = usbTasterPressed;
-// ================= DRS =================
-  // Button (Flankenerkennung)
-static bool lastDRSButton = false;
-bool currentDRSButton = can.isDRS();
-if (currentDRSButton && !lastDRSButton) {
-drsButtonPressed();
-}
+
+  // ================= DRS =================
+  static bool lastDRSButton = false;
+  bool currentDRSButton = can.isDRS();
+  if (currentDRSButton && !lastDRSButton) drsButtonPressed();
   lastDRSButton = currentDRSButton;
-  // System OK (minimal, später erweitern)
-bool voltageOK = safety.batteryVoltage > BATTERY_CUTOFF;
-bool overTemp  = safety.oilTemp > OIL_TEMP_CRITICAL;
-bool systemOK  = can.dataValid && !safety.isEmergencyActive() && voltageOK && !overTemp;
-  // DRS Logik
-drsUpdate(currentSpeed, gasPedal.getGasPercent(), safety.brakePressed, safety.currentRPM, systemOK, safety.oilTemp, safety.batteryVoltage);
-  // Output mit HARD Failsafe
-bool drsActive = isDRSActive() && !safety.brakePressed;
-// ================= FAILSAFE CHECK =================
-safety.setCanLoss(!can.dataValid);
-if (!can.dataValid || !safety.systemActive) {
-    // HARD FAILSAFE
-setDRS(false);
+
+  bool voltageOK = safety.batteryVoltage > BATTERY_CUTOFF;
+  bool overTemp  = safety.oilTemp > OIL_TEMP_CRITICAL;
+  bool systemOK  = can.dataValid && !safety.isEmergencyActive() && voltageOK && !overTemp;
+
+  drsUpdate(currentSpeed, gasPedal.getGasPercent(), safety.brakePressed, safety.currentRPM, systemOK, safety.oilTemp, safety.batteryVoltage);
+  bool drsActive = isDRSActive() && !safety.brakePressed;
+
+  // ================= FAILSAFE CHECK =================
+  safety.setCanLoss(!can.dataValid);
+  if (!can.dataValid || !safety.systemActive) {
+    setDRS(false);
     blinkerLeftState = false;
     blinkerRightState = false;
     warnBlinkState = false;
-lights.update(can, safety, false);
-updateDisplay(gearbox.getGear(), safety, can);
-return;
-}
-// ================= HARDWARE OUTPUT =================
-setDRS(drsActive);
-setExhaustServoAngle(can.exhaustAngle);
-mcp2.digitalWrite(MCP2_HUPE, can.isHorn() ? HIGH : LOW);
-bool canShift = safety.canShiftDown(safety.currentRPM);
-static bool lastUp = false;
-bool up = can.isShiftUp();
-if (up && !lastUp && safety.ignitionOn) gearbox.shiftUp(canShift);
+    lights.update(can, safety, false);
+    updateDisplay(gearbox.getGear(), safety, can);
+    return;
+  }
+
+  // ================= HARDWARE OUTPUT =================
+  setDRS(drsActive);
+  setExhaustServoAngle(can.exhaustAngle);
+  mcp2.digitalWrite(MCP2_HUPE, can.isHorn() ? HIGH : LOW);
+
+  bool canShift = safety.canShiftDown(safety.currentRPM);
+
+  static bool lastUp = false;
+  bool up = can.isShiftUp();
+  if (up && !lastUp && safety.ignitionOn) gearbox.shiftUp(canShift);
   lastUp = up;
-static bool lastDown = false;
-bool down = can.isShiftDown();
-if (down && !lastDown && safety.ignitionOn) gearbox.shiftDown(canShift);
+
+  static bool lastDown = false;
+  bool down = can.isShiftDown();
+  if (down && !lastDown && safety.ignitionOn) gearbox.shiftDown(canShift);
   lastDown = down;
-  // Reverse Logic
-static bool lastR = false;
-bool rev = can.isReverse() && can.isShiftDown() && safety.brakePressed;
-if (rev && !lastR && canShift && currentSpeed < 2.0) {
-gearbox.shiftToReverse(true);
-}
+
+  static bool lastR = false;
+  bool rev = can.isReverse() && can.isShiftDown() && safety.brakePressed;
+  if (rev && !lastR && canShift && currentSpeed < 2.0) gearbox.shiftToReverse(true);
   lastR = rev;
-lights.update(can, safety, launchActive);
-sendTelemetry(safety, can, gasPedal, gearbox.getGear(), launchActive);
-updateDisplay(gearbox.getGear(), safety, can);
+
+  lights.update(can, safety, launchActive);
+  sendTelemetry(safety, can, gasPedal, gearbox.getGear(), launchActive);
+  updateDisplay(gearbox.getGear(), safety, can);
 }

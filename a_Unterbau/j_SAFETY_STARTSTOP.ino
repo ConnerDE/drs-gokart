@@ -1,4 +1,3 @@
-
 /* ==================== SAFETY & START/STOP ==================== */
 class SafetyModule {
   float batteryBuf[BATTERY_SAMPLES];
@@ -120,18 +119,8 @@ public:
 
     if (!btn && lastBtn && (millis() - lastBtnTime > 200)) {
       lastBtnTime = millis();
-      if (ignitionOn) {
-        ignitionOn = false;
-        mcp2.digitalWrite(MCP2_ZUENDUNG, LOW);
-      } else {
-        if (brakePressed) {
-          ignitionOn = true;
-          mcp2.digitalWrite(MCP2_ZUENDUNG, HIGH);
-        } else {
-          ignitionOn = true;
-          mcp2.digitalWrite(MCP2_ZUENDUNG, HIGH);
-        }
-      }
+      ignitionOn = !ignitionOn;
+      mcp2.digitalWrite(MCP2_ZUENDUNG, ignitionOn ? HIGH : LOW);
     }
     lastBtn = btn;
 
@@ -167,5 +156,3 @@ public:
   bool canShiftDown(uint16_t rpm) { return rpm < RPM_SHIFT_LOCK; }
   void setCanLoss(bool lost) { ledMode = lost ? LED_CAN_LOSS : LED_NORMAL; }
 };
-
-extern GasPedal gasPedal;

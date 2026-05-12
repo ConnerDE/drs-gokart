@@ -1,9 +1,18 @@
-
 /* ==================== GAS PEDAL & SERVO ==================== */
+
+// Zugriff auf das globale Safety-Objekt ermöglichen
+class SafetyModule; 
+extern SafetyModule safety;
+
 class GasPedal {
   int32_t encoderPos = 0;
   uint8_t lastEncState = 0;
   uint8_t currentGasPercent = 0;
+
+  // Lernmodus-Variablen
+  bool calibrating = false;
+  int32_t calLearnMin = GAS_MAX_STEPS_RAW;
+  int32_t calLearnMax = 0;
 
 public:
   void begin() {
@@ -19,11 +28,14 @@ public:
     };
     ledc_channel_config(&gas_conf);
 
-    // Load Calibration
     calGasMin = prefs.getInt(PREF_GAS_MIN, 0);
     calGasMax = prefs.getInt(PREF_GAS_MAX, 60);
     calSrvGasMin = prefs.getInt(PREF_SRV_GAS_MIN, 0);
     calSrvGasMax = prefs.getInt(PREF_SRV_GAS_MAX, 180);
+
+    calibrating = true;
+    calLearnMin = GAS_MAX_STEPS_RAW;
+    calLearnMax = 0;
   }
 
   void cutThrottle() {
@@ -33,30 +45,54 @@ public:
     ledc_update_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH);
   }
 
-  void update(uint8_t driveMode, bool launchActive, uint16_t currentRPM) {
+  void updateCalibration() {
+    if (!calibrating) return;
+
     bool a = mcp1.digitalRead(MCP1_PEDAL_ENC_A);
     bool b = mcp1.digitalRead(MCP1_PEDAL_ENC_B);
     uint8_t state = (a << 1) | b;
 
     if (state != lastEncState) {
-      if ((lastEncState == 0b00 && state == 0b01) ||
-          (lastEncState == 0b01 && state == 0b11) ||
-          (lastEncState == 0b11 && state == 0b10) ||
-          (lastEncState == 0b10 && state == 0b00)) {
+      if ((lastEncState == 0b00 && state == 0b01) || (lastEncState == 0b01 && state == 0b11) ||
+          (lastEncState == 0b11 && state == 0b10) || (lastEncState == 0b10 && state == 0b00)) {
         encoderPos++;
-      } else if ((lastEncState == 0b00 && state == 0b10) ||
-                 (lastEncState == 0b10 && state == 0b11) ||
-                 (lastEncState == 0b11 && state == 0b01) ||
-                 (lastEncState == 0b01 && state == 0b00)) {
+      } else {
         encoderPos--;
       }
       lastEncState = state;
-      // Allow raw range for calibration, constrain later
-      if (encoderPos < 0) encoderPos = 0;
-      if (encoderPos > GAS_MAX_STEPS_RAW) encoderPos = GAS_MAX_STEPS_RAW;
+      encoderPos = constrain(encoderPos, 0, GAS_MAX_STEPS_RAW);
     }
 
-    // Calculate Percentage based on Calibration
+    if (encoderPos < calLearnMin) calLearnMin = encoderPos;
+    if (encoderPos > calLearnMax) calLearnMax = encoderPos;
+
+    if ((calLearnMax - calLearnMin) > 20 && encoderPos <= calLearnMin + 2) {
+      calGasMin = calLearnMin;
+      calGasMax = calLearnMax;
+      prefs.putInt(PREF_GAS_MIN, calGasMin);
+      prefs.putInt(PREF_GAS_MAX, calGasMax);
+      calibrating = false;
+    }
+  }
+
+  bool isCalibrating() { return calibrating; }
+
+  void update(uint8_t driveMode, bool launchActive, uint16_t currentRPM, bool neutralActive) {
+    bool a = mcp1.digitalRead(MCP1_PEDAL_ENC_A);
+    bool b = mcp1.digitalRead(MCP1_PEDAL_ENC_B);
+    uint8_t state = (a << 1) | b;
+
+    if (state != lastEncState) {
+      if ((lastEncState == 0b00 && state == 0b01) || (lastEncState == 0b01 && state == 0b11) ||
+          (lastEncState == 0b11 && state == 0b10) || (lastEncState == 0b10 && state == 0b00)) {
+        encoderPos++;
+      } else {
+        encoderPos--;
+      }
+      lastEncState = state;
+      encoderPos = constrain(encoderPos, 0, GAS_MAX_STEPS_RAW);
+    }
+
     int32_t constrainedPos = constrain(encoderPos, calGasMin, calGasMax);
     currentGasPercent = map(constrainedPos, calGasMin, calGasMax, 0, 100);
 
@@ -64,13 +100,9 @@ public:
     float outputNorm = inputNorm;
 
     switch (driveMode) {
-      case 0: outputNorm = inputNorm; break;
       case 1: outputNorm = pow(inputNorm, 1.5); break;
       case 2: outputNorm = inputNorm * inputNorm; break;
-      case 3:
-        outputNorm = inputNorm * 1.2;
-        if (outputNorm > 1.0) outputNorm = 1.0;
-        break;
+      case 3: outputNorm = constrain(inputNorm * 1.2, 0.0, 1.0); break;
     }
 
     int targetAngle = outputNorm * (calSrvGasMax - calSrvGasMin) + calSrvGasMin;
@@ -79,15 +111,19 @@ public:
       targetAngle = calSrvGasMin;
     }
 
-    uint32_t pulseWidth_us = map(targetAngle, 0, 180, 1000, 2000);
-    uint32_t duty = (uint32_t)((pulseWidth_us * (uint64_t)LEDC_SERVO_DUTY_MAX) / 20000ULL);
-
-    // Drehzahlbegrenzer
-    uint16_t rpmLimit = safety.neutralActive ? 4500 : 4100;
-    if (currentRPM >= rpmLimit) {
-      targetAngle = calSrvGasMin;
+    // Zugriff auf Safety-Modul für RPM Limit
+    // Hier lag der Fehler: safety muss vollständig bekannt sein oder per Pointer/Methode gelöst werden
+    // Wir nutzen hier den direkten Zugriff, da safety in j_ definiert wird.
+    extern bool getNeutralState(); // Alternative falls Fehler bleibt
+    
+    uint16_t rpmLimit = 4100;
+    // Da safety erst in j_ definiert wird, nutzen wir hier einen Workaround für den Compiler:
+    if (currentRPM >= (neutralActive ? 4500 : 4100)) {
+       targetAngle = calSrvGasMin;
     }
 
+    uint32_t pulseWidth_us = map(targetAngle, 0, 180, 1000, 2000);
+    uint32_t duty = (uint32_t)((pulseWidth_us * (uint64_t)LEDC_SERVO_DUTY_MAX) / 20000ULL);
     ledc_set_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH, duty);
     ledc_update_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH);
   }
