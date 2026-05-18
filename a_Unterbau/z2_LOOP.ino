@@ -91,7 +91,7 @@ void loop() {
     blinkerLeftState = false;
     blinkerRightState = false;
     warnBlinkState = false;
-    lights.update(can, safety, false);
+    lights.update(can, safety, false, steering.getSteerPercent());
     updateDisplay(gearbox.getGear(), safety, can, virtualGear.getGear(), can.chassisDataValid);
     return;
   }
@@ -118,7 +118,7 @@ void loop() {
   if (rev && !lastR && canShift && currentSpeed < 2.0) gearbox.shiftToReverse(true);
   lastR = rev;
 
-  lights.update(can, safety, launchActive);
+  lights.update(can, safety, launchActive, steering.getSteerPercent());
   sendTelemetry(safety, can, gasPedal, gearbox.getGear(), launchActive);
   updateDisplay(gearbox.getGear(), safety, can, virtualGear.getGear(), can.chassisDataValid);
 }

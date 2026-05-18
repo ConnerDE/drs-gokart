@@ -158,7 +158,7 @@ public:
     }
   }
 
-  void update(CanReceiver& can, SafetyModule& safety, bool launchActive) {
+  void update(CanReceiver& can, SafetyModule& safety, bool launchActive, int8_t steerPercent) {
     playWelcomeAnimation();
 
     if (!can.dataValid && lastDataValid) {
@@ -224,9 +224,8 @@ public:
           applyRGBEffect(ledsFrontVR, NUM_FRONT_LEDS, effectiveRgbMode, can.driveMode);
         }
         if (can.chassisDataValid) {
-          extern SteeringInput steering;
           updateCorneringLight(ledsFrontVL, ledsFrontVR, NUM_FRONT_LEDS,
-                               steering.getSteerPercent(), can.rawSpeedVL, can.rawSpeedVR);
+                               steerPercent, can.rawSpeedVL, can.rawSpeedVR);
         }
       }
     }
