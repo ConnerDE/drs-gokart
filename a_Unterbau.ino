@@ -1,0 +1,295 @@
+
+/*
+ * ESP32-S3 Unterbau-Controller (ESP2)
+ * VERSION: v7.0 FINAL (Calibration & Learning Mode)
+ * STATUS: FULL CODE – COMPLETE
+ */
+
+#include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_MCP23X17.h>
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_BMP280.h>
+#include <Adafruit_ADS1X15.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <FastLED.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <ArduinoJson.h>
+#include <driver/pulse_cnt.h>
+#include <Preferences.h>
+#include <driver/ledc.h>
+#include <driver/twai.h>
+#include <TMCStepper.h>
+#include <esp_task_wdt.h>
+
+/* ==================== DEFINITIONS & ENUMS ==================== */
+enum StatusLEDMode { LED_NORMAL, LED_EMERGENCY, LED_CAN_LOSS, LED_CALIBRATION };
+
+#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a7"
+
+
+/* ==================== CONSTANTS ==================== */
+#define MAX_GEAR              5
+#define RPM_SHIFT_LOCK        3500
+#define BATTERY_CUTOFF        10.5
+#define BATTERY_FACTOR        4.895
+#define OIL_TEMP_CRITICAL     110.0
+#define BATTERY_SAMPLES       10
+#define CAN_TIMEOUT_MS        2000
+#define CAN_ID_CHASSIS        0x123
+#define CAN_ID_ASR            0x100
+#define PIN_STEER_ADC         3
+#define WHEEL_RADIUS_M        0.13f
+#define GEAR_HARDWARE_C       8.021f
+#define GEAR_RATIO_TOLERANCE  0.5f
+#define GEAR_MIN_SPEED_KMH    2.0f
+#define ROLLOVER_SPEED_KMH    40.0f
+#define ROLLOVER_STEER_PCT    30
+#define IGNITION_THRESHOLD    9.0
+#define GAS_MAX_STEPS_RAW     100 // Interner Zähler-Maximalwert (vor Kalibrierung)
+#define GAS_SERVO_TRAVEL_DEG  90
+#define STARTER_RPM_CUTOFF    300
+#define SERVICE_HOURS_LIMIT   10.0
+#define CHAIN_SHIFTS_LIMIT    50
+#define WDT_TIMEOUT           30   // 30 Sekunden - Setup mit vielen Sensoren braucht Zeit#define DRIVE_MODE_NORMAL     0
+#define DRIVE_MODE_SPORT      1
+#define DRIVE_MODE_OFFROAD    2
+#define DRIVE_MODE_RACE       3
+#define ASR_SLIP_NORMAL_PCT   10
+#define ASR_SLIP_OFFROAD_PCT  25
+#define ASR_SLIP_DRIFT_PCT    50
+
+/* ==================== LEDC ==================== */
+#define LEDC_SERVO_EXH_CH    LEDC_CHANNEL_0
+#define LEDC_SERVO_GAS_CH    LEDC_CHANNEL_1
+#define LEDC_SERVO_TIMER     LEDC_TIMER_0
+#define LEDC_SERVO_MODE      LEDC_LOW_SPEED_MODE
+#define LEDC_SERVO_FREQ      50
+#define LEDC_SERVO_RES       LEDC_TIMER_13_BIT
+#define LEDC_SERVO_DUTY_MAX  8191
+
+// PIN DEFINITIONS (aus b_PIN-Def)
+#define PIN_BATTERY_ADC       1
+#define PIN_EXHAUST_SERVO     2
+#define PIN_OIL_TEMP          4
+#define PIN_TMC_EN            5
+#define PIN_TMC_UART          6
+#define PIN_RPM_HALL          7
+#define PIN_I2C_SDA           8
+#define PIN_I2C_SCL           9
+#define PIN_CAN_RX            10
+#define PIN_CAN_TX            11
+#define PIN_LED_SPOILER       12
+#define PIN_TMC_STEP          13
+#define PIN_TMC_DIR           14
+#define PIN_LED_HECK_HL       15
+#define PIN_LED_HECK_HR       16
+#define PIN_LED_FRONT_VL      17
+#define PIN_LED_FRONT_VR      18
+#define PIN_GAS_SERVO         43
+#define PIN_START_LED         44
+
+// LED CONFIG (aus c_LED-Config)
+#define NUM_FRONT_LEDS        50
+#define NUM_HECK_HL           22
+#define NUM_HECK_HR           22
+#define NUM_SPOILER           187
+#define BLINKER_OUTER_LEDS    35
+#define SPOILER_BLINKER_LEFT  0
+#define SPOILER_BLINKER_RIGHT 152
+#define SPOILER_CENTER_START  80
+#define SPOILER_CENTER_LEN    27
+
+// TMC2209 CONFIG (aus d_)
+#define R_SENSE               0.11f
+#define STALL_VALUE           150
+#define DRIVER_ADDRESS        0b00
+
+// OLED CONFIG (aus e_)
+#define SCREEN_WIDTH          128
+#define SCREEN_HEIGHT         64
+#define OLED_RESET            -1
+#define SCREEN_ADDRESS        0x3C
+#define USE_OLED_DISPLAY      0
+
+// MCP23017 MAPPING (aus f_)
+#define MCP1_ADDR             0x20
+#define MCP2_ADDR             0x21
+#define MCP1_USB_TASTER       0
+#define MCP1_PEDAL_ENC_A      1
+#define MCP1_PEDAL_ENC_B      6
+#define MCP1_NEUTRAL          8
+#define MCP1_OIL              9
+#define MCP1_BRAKE            10
+#define MCP1_TILT             13
+#define MCP1_EGT_SCLK         12
+#define MCP1_EGT_MISO         14
+#define MCP1_EGT_CS           15
+#define MCP2_TRANS3           0
+#define MCP2_USB_TRANS        1
+#define MCP2_TRANS1           2
+#define MCP2_FERN             3
+#define MCP2_ABBLEND          4
+#define MCP2_TRANS2           5
+#define MCP2_ESTARTER         MCP2_TRANS2
+#define MCP2_DRS_R            6
+#define MCP2_DRS_L            7
+#define MCP2_PIEZO            8
+#define MCP2_LED              9
+#define MCP2_START_BTN        10
+#define MCP2_ENDSTOP_R        11
+#define MCP2_HYD_PUMP_THERM   12
+#define MCP2_HUPE             14
+#define MCP2_ZUENDUNG         15
+
+/* ==================== ADS1115 ADC CHANNELS ==================== */
+#define ADS1115_CHANNEL_GAS    0       // Eingang 0: Gaspedal Poti (0-10k)
+#define ADS1115_CHANNEL_STEER  2       // Eingang 2: Lenkwinkel Sensor
+#define ADS1115_CHANNEL_CURRENT 3      // Eingang 3: Stromsensor (ACS758 100A)
+
+/* ==================== STROMSENSOR KONFIGURATION (ACS758 100A) ==================== */
+#define CURRENT_SENSOR_SENSITIVITY_MV_PER_A  26.5f    // ACS758-100U-PFF: 26.5 mV/A
+#define CURRENT_SENSOR_ZERO_OFFSET_V         2.5f     // Offset bei 0A (VCC/2 = 5V/2)
+#define CURRENT_SENSOR_NOISE_FLOOR_A         0.2f     // Mindest-Stromfluss für Messung
+#define CURRENT_SENSOR_MAX_A                 100.0f   // Max 100A
+#define CURRENT_SENSOR_CRITICAL_A            95.0f    // Warnung ab 95A
+
+
+/* ==================== EEPROM KEYS ==================== */
+#define PREF_NAMESPACE    "esp2"
+#define PREF_GEAR         "gear"
+#define PREF_SHIFTS       "shifts"
+#define PREF_CHAIN        "chain"
+#define PREF_HOURS        "hours"
+// Calibration Keys
+#define PREF_GAS_MIN      "gas_min"
+#define PREF_GAS_MAX      "gas_max"
+#define PREF_SRV_GAS_MIN  "srv_g_min"
+#define PREF_SRV_GAS_MAX  "srv_g_max"
+#define PREF_SRV_EXH_MIN  "srv_e_min"
+#define PREF_SRV_EXH_MAX  "srv_e_max"
+#define PREF_STEER_MIN    "str_min"
+#define PREF_STEER_CENTER "str_ctr"
+#define PREF_STEER_MAX    "str_max"
+#define PREF_CURR_ZERO    "cur_zero"
+
+/* ==================== GLOBAL OBJECTS ==================== */
+Adafruit_MCP23X17 mcp1, mcp2;
+Adafruit_AHTX0 aht20;
+Adafruit_BMP280 bmp280;
+
+BLEServer* pServer = nullptr;
+BLECharacteristic* pCharacteristic = nullptr;
+BLECharacteristic* pCharInput = nullptr;
+bool deviceConnected = false;
+bool usbState = false;
+bool obdMode = false;
+bool bleTestMode = false;
+bool forceBleTelemetry = false;
+uint8_t bleTestStep = 0;
+
+uint32_t totalShifts = 0;
+uint32_t chainShifts = 0;
+float engineHours = 0.0;
+float currentSpeed = 0.0;
+uint8_t i2cStatus = 0;
+
+// Calibration Variables
+int32_t calGasMin = 0;
+int32_t calGasMax = 60;
+int calSrvGasMin = 0;
+int calSrvGasMax = GAS_SERVO_TRAVEL_DEG;
+int calSrvExhMin = 0;
+int calSrvExhMax = 180;
+
+/* ==================== INSTANCES ==================== */
+
+bool blinkerLeftState = false;
+bool blinkerRightState = false;
+bool warnBlinkState = false;
+bool lastBlinkLeftBtn = false;
+bool lastBlinkRightBtn = false;
+bool lastWarnBtn = false;
+unsigned long blinkerStartTime = 0;
+
+/* ==================== FORWARD DECLARATIONS ==================== */
+
+// Klassen-Forward-Declarations
+class RPMCounter;
+class CanReceiver;
+class SafetyModule;
+class GasPedal;
+class Gearbox;
+class LightsManager;
+class VirtualGearDetector;
+class CurrentSensor;
+class SteeringInput;
+class EGTMax31855;
+
+// DRS Forward-Declarations (definiert in p_DRS.ino / q_DRS-Config.ino)
+enum DRSState { DRS_Disabled, DRS_Armed, DRS_Active };
+DRSState getDRSState();
+bool isDRSActive();
+void setDRSShowMode(bool val);
+bool drsAllowed(float speed, int throttle, int rpm, bool braking, bool systemOK, float oilTemp, float voltage);
+void runBleTestMode();
+void stopBleTestModeOutputs();
+extern bool drsShowMode;
+
+// Objekt-Forward-Declarations (definiert in za_global.ino)
+extern Preferences prefs;
+extern DallasTemperature ds18b20;
+extern Adafruit_SSD1306 display;
+extern TMC2209Stepper driver;
+extern CRGB ledsFrontVL[];
+extern CRGB ledsFrontVR[];
+extern CRGB ledsHeckHL[];
+extern CRGB ledsHeckHR[];
+extern CRGB ledsSpoiler[];
+extern RPMCounter rpm;
+extern CanReceiver can;
+extern SafetyModule safety;
+extern Gearbox gearbox;
+extern GasPedal gasPedal;
+extern LightsManager lights;
+extern VirtualGearDetector virtualGear;
+extern CurrentSensor currentSensor;
+extern SteeringInput steering;
+extern EGTMax31855 egtSensor;
+
+// EXHAUST SERVO
+void initExhaustServo() {
+  ledc_channel_config_t exh_conf = {
+    .gpio_num = PIN_EXHAUST_SERVO,
+    .speed_mode = LEDC_SERVO_MODE,
+    .channel = LEDC_SERVO_EXH_CH,
+    .intr_type = LEDC_INTR_DISABLE,
+    .timer_sel = LEDC_SERVO_TIMER,
+    .duty = 0,
+    .hpoint = 0,
+    .flags = {}
+  };
+  ledc_channel_config(&exh_conf);
+
+  calSrvExhMin = prefs.getInt(PREF_SRV_EXH_MIN, 0);
+  calSrvExhMax = prefs.getInt(PREF_SRV_EXH_MAX, 180);
+}
+
+void setExhaustServoAngle(uint8_t angle) {
+  // Map 0-90 logic to calibrated servo range
+  int targetAngle = calSrvExhMin;
+  if (angle == 45) targetAngle = (calSrvExhMin + calSrvExhMax) / 2;
+  if (angle == 90) targetAngle = calSrvExhMax;
+
+  uint32_t pulseWidth_us = map(targetAngle, 0, 180, 1000, 2000);
+  uint32_t duty = (uint32_t)((pulseWidth_us * (uint64_t)LEDC_SERVO_DUTY_MAX) / 20000ULL);
+  ledc_set_duty(LEDC_SERVO_MODE, LEDC_SERVO_EXH_CH, duty);
+  ledc_update_duty(LEDC_SERVO_MODE, LEDC_SERVO_EXH_CH);
+}

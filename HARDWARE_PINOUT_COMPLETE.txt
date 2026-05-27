@@ -1,0 +1,131 @@
+/* ==================== HARDWARE PINOUT DOCUMENTATION v7.0 ==================== */
+/*
+ * GokartElektronik - Unterbau-Controller (ESP32-S3 Devkit C1 N16R8)
+ *
+ * Diese Datei dokumentiert die vollständige Hardware-Pinbelegung
+ * basierend auf der mechanischen Steckerbestückung.
+ */
+
+/* ==================== CONNECTOR 1 (GRÜN) - HAUPTANSCHLUSS ==================== */
+
+| Pin | Funktion             | Typ          | GPIO/Port  | Beschreibung                          |
+|----|----------------------|--------------|-----------|---------------------------------------|
+| 1  | Bremsschalter        | Schalter     | MCP1/B2   | Brembetätigung (Sicherheit)          |
+| 2  | CAN LOW              | Bus          | GPIO 10   | CAN Empfänger (RX)                   |
+| 3  | Auspuff Data SG90    | Servo        | GPIO 2    | Auspuff-Servo PWM Signal             |
+| 4  | ---                  | ---          | ---       | (ungenutzt)                          |
+| 5  | Frei                 | GPIO         | GPIO 21   | Verfügbar für Erweiterung            |
+| 6  | Frei n/a             | GPIO         | GPIO 47   | Verfügbar für Erweiterung            |
+| 7  | Frei n/a             | GPIO         | GPIO 48   | Verfügbar für Erweiterung            |
+| 8  | Frei                 | Transistor   | MCP2/A0   | Transistor 3                         |
+| 9  | Getriebe N Sensor    | Schalter     | MCP1/B0   | Gang-Sensor Neutral                  |
+| 10 | Getriebe Coil 2      | Motor        | TMC2209   | Nema17 Spule 2 (Schritt 11)         |
+| 11 | Getriebe Coil 4      | Motor        | TMC2209   | Nema17 Spule 4 (Schritt 3)          |
+| 12 | Motor Öl Sensor      | Schalter     | MCP1/B1   | Öldruck / Ölstand (Sicherheit)      |
+| 13 | Motor RPM            | Sensor       | GPIO 7    | Drehzahlsensor Hall A3144           |
+| 14 | GND                  | Masse        | ---       | Systemerde                           |
+| 15 | Fernlicht            | Transistor   | MCP2/A3   | Fernlicht / Scheinwerfer             |
+| 16 | Hupe                 | Transistor   | MCP2/B6   | Horn / Buzzer                        |
+| 17 | Lenkung +5V          | Versorgung   | +5V       | Stromversorgung für CAN-Lenkung      |
+| 18 | CAN HIGH             | Bus          | GPIO 11   | CAN Sender (TX)                      |
+| 19 | Auspuff Servo +5V    | Versorgung   | +5V       | Stromversorgung Servo                |
+| 20 | Zündunterbrechung    | Transistor   | MCP2/B7   | Zündung Kill (Sicherheit)           |
+| 21 | Mode H/L             | LED          | GPIO 15   | WS2812B Hecklicht Links (22 LEDs)   |
+| 22 | Mode H/R             | LED          | GPIO 16   | WS2812B Hecklicht Rechts (22 LEDs)  |
+| 23 | Mode V/L             | LED          | GPIO 17   | WS2812B Frontlicht Links (50 LEDs)  |
+| 24 | Mode V/R             | LED          | GPIO 18   | WS2812B Frontlicht Rechts (50 LEDs) |
+| 25 | Abblendlicht         | Transistor   | MCP2/A4   | Abblendlicht / Dipped               |
+| 26 | Getriebe Coil 1      | Motor        | TMC2209   | Nema17 Spule 1 (Schritt 9)          |
+| 27 | Getriebe Coil 3      | Motor        | TMC2209   | Nema17 Spule 3 (Schritt 1)          |
+| 28 | Frei                 | GPIO         | GPIO 3    | Lenkwinkel ADC (ADS1115 eingang 2)  |
+| 29 | Motor Temperatur     | Sensor       | GPIO 4    | DS18B20 OneWire                      |
+| 30 | Motor +5V            | Versorgung   | +5V       | Stromversorgung Sensoren             |
+| 31 | +12V Dauer           | Versorgung   | +12V      | Dauerplus Batterie                   |
+| 32 | Zündschloss Input    | Eingang      | GPIO 1    | Batterie ADC Messung (1:4,86)       |
+
+/* ==================== CONNECTOR 2 (BLAU) - ERWEITERUNGSANSCHLUSS ==================== */
+
+| Pin | Funktion             | Typ          | GPIO/MCP   | Beschreibung                         |
+|----|----------------------|--------------|-----------|---------------------------------------|
+| 1  | DRS Links            | Transistor   | MCP2/A7    | Drag Reduction System Links          |
+| 2  | Spoiler Beleuchtung  | LED          | GPIO 12    | WS2812B Spoiler LEDs (187 LEDs)     |
+| 3  | Gaspedal Poti 10k    | ADC          | ADS1115/A0 | Gaspedal Poti (noch nicht impl.)    |
+| 4  | USB Taster           | GPIO         | MCP1/A0    | USB Mode Taster                      |
+| 5  | MCP23017/1 A1        | GPIO         | MCP1/A1    | Gaspedal Encoder A                   |
+| 6  | +5V                  | Versorgung   | +5V        | Stromversorgung                      |
+| 7  | MCP23017/1 A6        | GPIO         | MCP1/A6    | Gaspedal Encoder B                   |
+| 8  | Transistor 1         | Transistor   | MCP2/A2    | Freier Ausgang                       |
+| 9  | I2C SCL              | Bus          | GPIO 9     | OLED & Sensoren I2C Clock            |
+| 10 | +3.3V                | Versorgung   | +3.3V      | 3.3V Versorgung                      |
+| 11 | +5V                  | Versorgung   | +5V        | Stromversorgung                      |
+| 12 | Start Stop Taster    | GPIO         | MCP2/B2    | Motor Start/Stop Taster              |
+| 13 | Endschalter Getriebe | GPIO         | MCP2/B3    | Getriebe Anschlag (Reverse Sensor)   |
+| 14 | MCP2/B4              | GPIO         | MCP2/B4    | Frei verfügbar                       |
+| 15 | MCP2/B5              | GPIO         | MCP2/B5    | Frei verfügbar                       |
+| 16 | MCP1/B3              | GPIO         | MCP1/B3    | Frei verfügbar                       |
+| 17 | DRS Rechts           | Transistor   | MCP2/A6    | Drag Reduction System Rechts         |
+| 18 | MCP1/A3              | GPIO         | MCP1/A3    | Frei verfügbar                       |
+| 19 | MCP1/A4              | GPIO         | MCP1/A4    | Frei verfügbar                       |
+| 20 | MCP1/A5              | GPIO         | MCP1/A5    | Frei verfügbar                       |
+| 21 | MCP1/A7              | GPIO         | MCP1/A7    | Frei verfügbar                       |
+| 22 | Kippschalter         | GPIO         | MCP1/B5    | Kipp-/Überschlag Sensor              |
+| 23 | MCP1/B6              | GPIO         | MCP1/B6    | Frei verfügbar                       |
+| 24 | USB Transistor       | Transistor   | MCP2/A1    | USB Umschaltung                      |
+| 25 | Transistor 2         | Transistor   | MCP2/A5    | Relais Ansteuerung                   |
+| 26 | Stromsensor          | ADC          | ADS1115/A3 | Stromsensor (noch nicht impl.)      |
+| 27 | GND                  | Masse        | ---        | Systemerde                           |
+| 28 | Lenkwinkel Sensor    | ADC          | ADS1115/A2 | Lenkwinkel ADC Messung               |
+| 29 | MCP1/B6              | GPIO         | MCP1/B6    | Frei verfügbar                       |
+| 30 | MCP1/B7              | GPIO         | MCP1/B7    | Frei verfügbar                       |
+| 31 | Vergaser Servo       | GPIO         | GPIO 43    | Gaspedal Servo Motor SG90            |
+| 32 | Start-Led            | GPIO         | GPIO 44    | Start-LED PWM Statusanzeige          |
+
+/* ==================== I2C ADRESSENPLAN ==================== */
+
+Adresse    | Gerät           | Port         | Funktion
+-----------|-----------------|--------------|----------------------------------
+0x20       | MCP23017/1      | GPIO 8/9     | Port Expander - Eingänge
+0x21       | MCP23017/2      | GPIO 8/9     | Port Expander - Ausgänge
+0x38       | AHT20           | GPIO 8/9     | Temperatur & Feuchte Sensor
+0x3C       | SSD1306 OLED    | GPIO 8/9     | OLED Display
+0x48       | ADS1115         | GPIO 8/9     | 4-Kanal ADC (noch nicht vollst.)
+0x77       | BMP280          | GPIO 8/9     | Barometer / Luftdruck Sensor
+
+/* ==================== MOTOR CONTROL (TMC2209) STEPPER ==================== */
+
+Signal    | GPIO | Beschreibung
+----------|------|--------------------------------------
+DIR       | 14   | Richtung (HIGH=up/forward)
+STEP      | 13   | Step Impuls (Flanke)
+EN        | 5    | Enable Low (aktiv)
+UART      | 6    | UART für Konfiguration
+GND       | -    | Masse
+
+NEMA17 Motor-Spulen:
+  Coil A: Connector 1.26 (GPIO über TMC) -> Pin 1, 2
+  Coil B: Connector 1.10 (GPIO über TMC) -> Pin 3, 4
+
+Funktion: Schaltet das 5-Gang Schaltgetriebe elektromagnetisch
+
+/* ==================== SERVO PWM KONFIGURATION (LEDC) ==================== */
+
+Channel     | GPIO | Funktion
+-----------|------|-----------------------------------
+Channel 0   | 2    | Auspuff-Servo (Exahust)
+Channel 1   | 43   | Gaspedal-Servo (Vergaser)
+Timer       | 0    | Shared 50Hz Timer
+Frequenz    | 50   | Standard Servo Frequenz
+
+/* ==================== VALIDIERUNGSSTATUS ==================== */
+
+✅ GPIO Zuordnung: VOLLSTÄNDIG & KORREKT
+✅ MCP23017 Mapping: VOLLSTÄNDIG & KORREKT
+✅ I2C Adressen: ALLE DEFINIERT
+⚠️  ADS1115 ADC: NUR DEFINIERT (Pin 28/3 für Lenkwinkel)
+❓ Stromsensor (ADS1115/A3): NICHT IMPLEMENTIERT
+❓ Gaspedal Poti (ADS1115/A0): NICHT IMPLEMENTIERT
+
+Hinweis: Für ADS1115 wird noch eine separate Bibliothek und Kalibrierung benötigt.
+
+*/
+

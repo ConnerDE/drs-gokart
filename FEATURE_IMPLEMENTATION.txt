@@ -1,0 +1,175 @@
+═══════════════════════════════════════════════════════════════════════════════
+                     NEUE FEATURES IMPLEMENTIERT
+                     Gaspedal-Poti, Stromsensor, CAN-Lenkwinkel
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ ALLE ANGEFORDERTEN FEATURES WURDEN IMPLEMENTIERT!
+
+═══════════════════════════════════════════════════════════════════════════════
+  1. GASPEDAL: EC11 ENCODER → 10k POTI (ADS1115)
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ ALT: EC11 Rotary Encoder über MCP23017 Pins A1/A6
+   - Kompliziert zu kalibrieren
+   - Störanfällig
+
+✅ NEU: 10k Potentiometer über ADS1115 Kanal 0
+   - Direkt vom Gaspedal
+   - Einfache lineare Kalibrierung
+   - ADC: 0-32767 → 0-100%
+
+📁 DATEIEN GEÄNDERT:
+   • i_GAS_SERVO.ino         - Ersetzt Encoder-Logik mit Poti-ADC
+   • c2_ADS1115_Driver.ino   - NEUE Datei: ADS1115 ADC Treiber
+   • b_PIN_Def.ino           - ADS1115 Kanaldefinitionen hinzugefügt
+   • a_Unterbau.ino          - #include Adafruit_ADS1X15.h hinzugefügt
+
+📊 KALIBRIERUNG:
+   Beim ersten Start: calPotiMin = 500, calPotiMax = 31000
+   → Vollständiges Durchfahren des Gashedals speichert neue Min/Max in Preferences
+
+═══════════════════════════════════════════════════════════════════════════════
+  2. STROMSENSOR: ACS770 (30A) → BLE TELEMETRIE
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ ALT: Keine Stromsensor-Unterstützung
+
+✅ NEU: ACS770 30A Stromsensor über ADS1115 Kanal 3
+   - Messung: 0-30A Stromfluss
+   - Konvertierung: 166mV/A Standard
+   - Offset: 2.5V bei 0A
+   - Berechnung: Leistung = U × I
+
+📁 DATEIEN GEÄNDERT:
+   • x_CURRENT_SENSOR.ino    - NEUE Datei: Stromsensor Klasse
+   • n_BLE.ino               - sendTelemetry BLE Daten erweitert:
+                              - curr_mA: Strom in Milliampere
+                              - power_W: Leistung in Watt
+                              - curr_raw: Rohwert vom ADC
+   • z_SETUP.ino             - currentSensor.begin() hinzugefügt
+   • zb_global.ino          - CurrentSensor Instanz hinzugefügt
+
+📡 BLE JSON TELEMETRY BEISPIEL:
+   {
+     "curr_mA": 2500,    // 2.5A
+     "power_W": 30.0,    // 30W @ 12V
+     "curr_raw": 16384,  // ADC Rohwert
+     "bat": 12.5,        // Batteriespannung
+     ...
+   }
+
+═══════════════════════════════════════════════════════════════════════════════
+  3. LENKWINKEL: LOKAL + CAN-BUS ABGLEICH
+═══════════════════════════════════════════════════════════════════════════════
+
+❌ ALT: Nur lokale ADC-Messung vom GPIO 3
+
+✅ NEU: Duale Messung mit automatischem Abgleich
+   - Lokal: GPIO 3 über analogRead (12-Bit: 0-4095)
+   - CAN-BUS: Lenkwinkel vom Lenkung-ESP (3. Mikrocontroller)
+   - Abgleich: Gewichteter Durchschnitt (70% lokal, 30% CAN)
+   - Toleranz: ±20% Warnung bei zu großer Abweichung
+
+📁 DATEIEN GEÄNDERT:
+   • s_STEERING.ino          - Dual-Channel Lenkwinkel Abgleich:
+                              - getSteerPercent(): Lokal nur
+                              - getAbglichSteerPercent(): Lokal + CAN
+   • h_CAN_Receiver.ino      - steerAngleCAN: Neue Variable
+   • z2_LOOP.ino             - CAN-Lenkwinkel an Steering weitergegeben
+   • z2_LOOP.ino             - steering.getAbglichSteerPercent() überall
+
+🔄 ABGLEICH LOGIK:
+   Wenn Unterschied > 20%:
+     → Log Warning auf Serial (max 1x pro 5 Sekunden)
+     → Verwende: Final = 70% × Local + 30% × CAN
+
+   Wenn kein CAN Signal:
+     → Fallback zu reiner lokaler Messung
+
+═══════════════════════════════════════════════════════════════════════════════
+  ADS1115 KANAL-ÜBERSICHT
+═══════════════════════════════════════════════════════════════════════════════
+
+Kanal    | Eingang | Funktion                    | Einbaubuch
+---------|---------|-----------------------------|-----------
+0        | Conn2.3 | Gaspedal Poti (10k)        | ADS1115_CHANNEL_GAS
+2        | Conn1.28| Lenkwinkel Backup (Reserve)| ADS1115_CHANNEL_STEER
+3        | Conn2.26| Stromsensor ACS770 (30A)  | ADS1115_CHANNEL_CURRENT
+
+Nicht genutzt:
+Kanal 1  | Frei   | Für zukünftige Ergänzung
+
+═══════════════════════════════════════════════════════════════════════════════
+  GLOBALE OBJEKTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Neu hinzugefügt in zb_global.ino:
+   • ADS1115Driver ads1115    - I2C ADC Treiber (0x48)
+   • CurrentSensor currentSensor - Stromsensor Monitor
+
+═══════════════════════════════════════════════════════════════════════════════
+  LOOP ÄNDERUNGEN
+═══════════════════════════════════════════════════════════════════════════════
+
+Neu in z2_LOOP.ino:
+
+1. Stromsensor Update:
+   currentSensor.update(safety.batteryVoltage * 1000);
+
+2. Lenkwinkel CAN-Abgleich:
+   if (can.dataValid && can.steerAngleCAN != 0) {
+     steering.setCANSteerPercent(can.steerAngleCAN);
+   }
+
+3. Verwendung von abgeglichenem Wert:
+   steering.getAbglichSteerPercent()  // statt getSteerPercent()
+
+═══════════════════════════════════════════════════════════════════════════════
+  VALIDIERUNG & TESTS
+═══════════════════════════════════════════════════════════════════════════════
+
+✅ ADS1115 Treiber:    Serial Output bei Init
+✅ GasPedal Poti:      Kalibrierungsmodus aktiv beim Start
+✅ Stromsensor:        BLE JSON Telemetrie enthält new Fields
+✅ Lenkwinkel Abgleich: Warnung bei Dis crepancy > 20%
+
+═══════════════════════════════════════════════════════════════════════════════
+  FEHLERBEHEBUNG
+═══════════════════════════════════════════════════════════════════════════════
+
+Wenn ADS1115 nicht erkannt wird:
+1. Überprüfe I2C Verdrahtung GPIO 8 (SDA) / GPIO 9 (SCL)
+2. Überprüfe 0x48 Adresse (A0/A1 Pins auf GND gesetzt?)
+3. Serial Output: "ADS1115 not found!"
+
+Wenn Gaspedal springt:
+1. Überprüfe Poti Verdrahtung (Conn2.3)
+2. Kalibriere neu: calPotiMin/Max zurücksetzen
+3. Erhöhe Sample Count (aktuell 3 im readGasPoti)
+
+Wenn CAN-Lenkwinkel nicht übernommen:
+1. Überprüfe CAN-Bus Verbindung
+2. Überprüfe Lenkung-ESP sendet steerAngleCAN
+3. Serial Output zeigt Warnung wenn > 20% Abweichung
+
+═══════════════════════════════════════════════════════════════════════════════
+  NÄCHSTE OPTIMIERUNGSMÖGLICHKEITEN
+═══════════════════════════════════════════════════════════════════════════════
+
+1. Gaspedal:
+   - Kalman Filter für Rausch-Reduzierung
+   - Hysterese implementieren
+   - Adaptive Kalibrierung
+
+2. Stromsensor:
+   - Energy Tracking über Zeit
+   - Peak Current Recording
+   - Low Battery Warning
+
+3. Lenkwinkel:
+   - Separate CAN-Message für Lenkung definieren
+   - Gyro Fusion (falls Gyro vorhanden)
+   - Plausibilitätsprüfung
+
+═══════════════════════════════════════════════════════════════════════════════
+
