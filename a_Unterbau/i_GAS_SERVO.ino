@@ -1,15 +1,23 @@
 /* ==================== GAS PEDAL & SERVO ==================== */
 class GasPedal {
-  int32_t encoderPos = 0;
-  uint8_t lastEncState = 0;
+  int32_t potiRaw = 0;              // Aktueller ADC Wert vom Poti (0-32767)
   uint8_t currentGasPercent = 0;
   uint8_t asrCutPercent = 0;
 
   bool calibrating = false;
-  int32_t calLearnMin = GAS_MAX_STEPS_RAW;
-  int32_t calLearnMax = 0;
+  int32_t calPotiMin = 500;         // Min Poti ADC Value (bottom)
+  int32_t calPotiMax = 31000;       // Max Poti ADC Value (top)
+
+  void clampServoCalibration() {
+    calSrvGasMin = constrain(calSrvGasMin, 0, 180 - GAS_SERVO_TRAVEL_DEG);
+    calSrvGasMax = constrain(calSrvGasMax, calSrvGasMin, calSrvGasMin + GAS_SERVO_TRAVEL_DEG);
+    if ((calSrvGasMax - calSrvGasMin) > GAS_SERVO_TRAVEL_DEG) {
+      calSrvGasMax = calSrvGasMin + GAS_SERVO_TRAVEL_DEG;
+    }
+  }
 
   void writeServoAngle(int targetAngle) {
+    targetAngle = constrain(targetAngle, calSrvGasMin, calSrvGasMax);
     uint32_t pulseWidth_us = map(targetAngle, 0, 180, 1000, 2000);
     uint32_t duty = (uint32_t)((pulseWidth_us * (uint64_t)LEDC_SERVO_DUTY_MAX) / 20000ULL);
     ledc_set_duty(LEDC_SERVO_MODE, LEDC_SERVO_GAS_CH, duty);
@@ -30,14 +38,20 @@ public:
     };
     ledc_channel_config(&gas_conf);
 
-    calGasMin = prefs.getInt(PREF_GAS_MIN, 0);
-    calGasMax = prefs.getInt(PREF_GAS_MAX, 60);
+    // Load calibration from Preferences
+    calPotiMin = prefs.getInt(PREF_GAS_MIN, 500);
+    calPotiMax = prefs.getInt(PREF_GAS_MAX, 31000);
     calSrvGasMin = prefs.getInt(PREF_SRV_GAS_MIN, 0);
-    calSrvGasMax = prefs.getInt(PREF_SRV_GAS_MAX, 180);
+    calSrvGasMax = prefs.getInt(PREF_SRV_GAS_MAX, GAS_SERVO_TRAVEL_DEG);
+    clampServoCalibration();
+    prefs.putInt(PREF_SRV_GAS_MIN, calSrvGasMin);
+    prefs.putInt(PREF_SRV_GAS_MAX, calSrvGasMax);
 
-    calibrating = true;
-    calLearnMin = GAS_MAX_STEPS_RAW;
-    calLearnMax = 0;
+    // Kalibrierungsmodus aktiv wenn Min >= Max
+    calibrating = (calPotiMin >= calPotiMax);
+    if (calibrating) {
+      Serial.println("GasPedal: Kalibrierungsmodus aktiv!");
+    }
   }
 
   void cutThrottle() {
@@ -47,64 +61,78 @@ public:
   void updateCalibration() {
     if (!calibrating) return;
 
-    bool a = mcp1.digitalRead(MCP1_PEDAL_ENC_A);
-    bool b = mcp1.digitalRead(MCP1_PEDAL_ENC_B);
-    uint8_t state = (a << 1) | b;
+    // Lese Poti vom ADS1115
+    potiRaw = ads1115.readGasPoti();
 
-    if (state != lastEncState) {
-      if ((lastEncState == 0b00 && state == 0b01) || (lastEncState == 0b01 && state == 0b11) ||
-          (lastEncState == 0b11 && state == 0b10) || (lastEncState == 0b10 && state == 0b00)) {
-        encoderPos++;
-      } else {
-        encoderPos--;
+    // Finde Min und Max
+    static int32_t learnMin = 32767;
+    static int32_t learnMax = 0;
+    static unsigned long calibStartTime = 0;
+
+    if (calibStartTime == 0) calibStartTime = millis();
+
+    if (potiRaw < learnMin) learnMin = potiRaw;
+    if (potiRaw > learnMax) learnMax = potiRaw;
+
+    // Nach 5 Sekunden speichern wenn Range > 5000
+    if (millis() - calibStartTime > 5000) {
+      if ((learnMax - learnMin) > 5000) {
+        calPotiMin = learnMin;
+        calPotiMax = learnMax;
+        prefs.putInt(PREF_GAS_MIN, calPotiMin);
+        prefs.putInt(PREF_GAS_MAX, calPotiMax);
+        calibrating = false;
+        Serial.printf("GasPedal Kalibrierung abgeschlossen: %d - %d\n", calPotiMin, calPotiMax);
       }
-      lastEncState = state;
-      encoderPos = constrain(encoderPos, 0, GAS_MAX_STEPS_RAW);
-    }
-
-    if (encoderPos < calLearnMin) calLearnMin = encoderPos;
-    if (encoderPos > calLearnMax) calLearnMax = encoderPos;
-
-    if ((calLearnMax - calLearnMin) > 20 && encoderPos <= calLearnMin + 2) {
-      calGasMin = calLearnMin;
-      calGasMax = calLearnMax;
-      prefs.putInt(PREF_GAS_MIN, calGasMin);
-      prefs.putInt(PREF_GAS_MAX, calGasMax);
-      calibrating = false;
     }
   }
 
   bool isCalibrating() { return calibrating; }
 
+  void setPedalMinFromCurrent() {
+    potiRaw = ads1115.readGasPoti();
+    calPotiMin = potiRaw;
+    prefs.putInt(PREF_GAS_MIN, calPotiMin);
+  }
+
+  void setPedalMaxFromCurrent() {
+    potiRaw = ads1115.readGasPoti();
+    calPotiMax = potiRaw;
+    prefs.putInt(PREF_GAS_MAX, calPotiMax);
+  }
+
   void update(uint8_t driveMode, bool launchActive, uint16_t currentRPM, bool neutralActive,
               bool asrActive, bool driftMode, uint8_t vRefKmh, int8_t steerPercent) {
     (void)neutralActive;
 
-    bool a = mcp1.digitalRead(MCP1_PEDAL_ENC_A);
-    bool b = mcp1.digitalRead(MCP1_PEDAL_ENC_B);
-    uint8_t state = (a << 1) | b;
-
-    if (state != lastEncState) {
-      if ((lastEncState == 0b00 && state == 0b01) || (lastEncState == 0b01 && state == 0b11) ||
-          (lastEncState == 0b11 && state == 0b10) || (lastEncState == 0b10 && state == 0b00)) {
-        encoderPos++;
-      } else {
-        encoderPos--;
-      }
-      lastEncState = state;
-      encoderPos = constrain(encoderPos, 0, GAS_MAX_STEPS_RAW);
+    // Lese aktuellen Poti Wert vom ADS1115
+    potiRaw = ads1115.readGasPoti();
+    if (calPotiMax <= calPotiMin) {
+      cutThrottle();
+      return;
     }
 
-    int32_t constrainedPos = constrain(encoderPos, calGasMin, calGasMax);
-    currentGasPercent = map(constrainedPos, calGasMin, calGasMax, 0, 100);
+    // Constraint auf Kalibrierungsbereich
+    int32_t constrainedPos = constrain(potiRaw, calPotiMin, calPotiMax);
+    currentGasPercent = map(constrainedPos, calPotiMin, calPotiMax, 0, 100);
 
-    float inputNorm = (float)(constrainedPos - calGasMin) / (float)(calGasMax - calGasMin);
+    // Normalisiert 0.0 - 1.0
+    float inputNorm = (float)(constrainedPos - calPotiMin) / (float)(calPotiMax - calPotiMin);
     float outputNorm = inputNorm;
 
+    // Drive Mode Mapping
     switch (driveMode) {
-      case 1: outputNorm = pow(inputNorm, 1.5); break;
-      case 2: outputNorm = inputNorm * inputNorm; break;
-      case 3: outputNorm = constrain(inputNorm * 1.2, 0.0, 1.0); break;
+      case DRIVE_MODE_SPORT:
+        outputNorm = pow(inputNorm, 1.5f);
+        break;
+      case DRIVE_MODE_OFFROAD:
+        outputNorm = pow(inputNorm, 1.8f);
+        if (inputNorm > 0.65f) outputNorm = 0.55f + (inputNorm - 0.65f) * 1.15f;
+        outputNorm = constrain(outputNorm, 0.0f, 0.95f);
+        break;
+      case DRIVE_MODE_RACE:
+        outputNorm = constrain(inputNorm * 1.2f, 0.0f, 1.0f);
+        break;
     }
 
     if (driftMode) {
@@ -113,12 +141,17 @@ public:
 
     int targetAngle = (int)(outputNorm * (calSrvGasMax - calSrvGasMin) + calSrvGasMin);
 
+    // Launch Control
     if (launchActive && currentRPM > 2100) {
       targetAngle = calSrvGasMin;
     }
 
+    // ASR (Anti-Slip Regulation) - Drosselklappe reduzieren
     if (asrActive) {
-      if (asrCutPercent < 95) asrCutPercent += driftMode ? 1 : 3;
+      uint8_t cutStep = 3;
+      if (driftMode) cutStep = 1;
+      else if (driveMode == DRIVE_MODE_OFFROAD) cutStep = 2;
+      if (asrCutPercent < 95) asrCutPercent = min(95, asrCutPercent + cutStep);
     } else if (asrCutPercent > 0) {
       asrCutPercent = (asrCutPercent > 8) ? asrCutPercent - 8 : 0;
     }
@@ -129,6 +162,7 @@ public:
       targetAngle = max(calSrvGasMin, targetAngle - cut);
     }
 
+    // Rollover Protection - Gas begrenzen bei Kurvenfahrt
     if ((float)vRefKmh > ROLLOVER_SPEED_KMH && abs(steerPercent) > ROLLOVER_STEER_PCT) {
       int steerMag = abs(steerPercent);
       int maxGasPct = map(steerMag, ROLLOVER_STEER_PCT, 100, 70, 25);
@@ -140,5 +174,5 @@ public:
   }
 
   uint8_t getGasPercent() { return currentGasPercent; }
-  int32_t getRawPos() { return encoderPos; }
+  int32_t getRawPos() { return potiRaw; }
 };

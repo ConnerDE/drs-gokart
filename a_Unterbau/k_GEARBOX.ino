@@ -5,9 +5,13 @@ class Gearbox {
 
 public:
   void begin() {
+    // TMC2209 PDN_UART is a single-wire UART. Keep RX and TX on the configured
+    // hardware pin so Serial1 does not fall back to a default TX pin used by LEDs.
+    Serial.println("Initializing Serial1 for TMC2209...");
     Serial1.begin(115200, SERIAL_8N1, PIN_TMC_UART, PIN_TMC_UART);
     delay(100);
 
+    Serial.println("Initializing TMC2209 Driver...");
     driver.begin();
     driver.toff(4);
     driver.blank_time(24);
@@ -15,17 +19,20 @@ public:
     driver.microsteps(16);
     driver.TCOOLTHRS(0xFFFFF);
     driver.SGTHRS(STALL_VALUE);
+    Serial.println("TMC2209 OK");
 
     pinMode(PIN_TMC_DIR, OUTPUT);
     pinMode(PIN_TMC_STEP, OUTPUT);
     pinMode(PIN_TMC_EN, OUTPUT);
     digitalWrite(PIN_TMC_EN, LOW);
 
-    if (!mcp2.digitalRead(MCP2_ENDSTOP_R)) {
+    if ((i2cStatus & (1 << 1)) && !mcp2.digitalRead(MCP2_ENDSTOP_R)) {
       currentGear = -1;
     } else {
       currentGear = prefs.getInt(PREF_GEAR, 0);
     }
+
+    Serial.println("Gearbox initialized");
   }
 
   int8_t getGear() const { return currentGear; }

@@ -6,10 +6,18 @@ void loop() {
   rpm.update();
   safety.currentRPM = rpm.getRPM();
   safety.update();
+  currentSensor.update((uint16_t)(safety.batteryVoltage * 1000.0f));
+  egtSensor.update();
 
   // Kalibrierung beim Start — Servo bleibt still
   if (gasPedal.isCalibrating()) {
     gasPedal.updateCalibration();
+    return;
+  }
+
+  if (bleTestMode) {
+    runBleTestMode();
+    sendTelemetry(safety, can, gasPedal, gearbox.getGear(), false);
     return;
   }
 
@@ -57,16 +65,16 @@ void loop() {
   }
 
   gasPedal.update(can.driveMode, launchActive, safety.currentRPM, safety.neutralActive,
-                  can.chassisDataValid && can.asrActive && !can.asrOff,
+                  can.shouldCutForSlip(),
                   can.driftMode, can.vRefKmh, steering.getSteerPercent());
 
   // USB Toggle (Debounced)
   static bool lastUsbTaster = true;
   static unsigned long lastUsbPress = 0;
-  bool usbTasterPressed = !mcp1.digitalRead(MCP1_USB_TASTER);
+  bool usbTasterPressed = (i2cStatus & (1 << 0)) ? !mcp1.digitalRead(MCP1_USB_TASTER) : false;
   if (usbTasterPressed && !lastUsbTaster && (millis() - lastUsbPress > 200)) {
     usbState = !usbState;
-    mcp2.digitalWrite(MCP2_USB_TRANS, usbState ? HIGH : LOW);
+    if (i2cStatus & (1 << 1)) mcp2.digitalWrite(MCP2_USB_TRANS, usbState ? HIGH : LOW);
     lastUsbPress = millis();
   }
   lastUsbTaster = usbTasterPressed;
@@ -91,7 +99,8 @@ void loop() {
     blinkerLeftState = false;
     blinkerRightState = false;
     warnBlinkState = false;
-    lights.update(can, safety, false, steering.getSteerPercent());
+    lights.update(can, safety, false, steering.getAbglichSteerPercent());
+    sendTelemetry(safety, can, gasPedal, gearbox.getGear(), false);
     updateDisplay(gearbox.getGear(), safety, can, virtualGear.getGear(), can.chassisDataValid);
     return;
   }
@@ -99,7 +108,7 @@ void loop() {
   // ================= HARDWARE OUTPUT =================
   setDRS(drsActive);
   setExhaustServoAngle(can.exhaustAngle);
-  mcp2.digitalWrite(MCP2_HUPE, can.isHorn() ? HIGH : LOW);
+  if (i2cStatus & (1 << 1)) mcp2.digitalWrite(MCP2_HUPE, can.isHorn() ? HIGH : LOW);
 
   bool canShift = safety.canShiftDown(safety.currentRPM);
 
@@ -118,7 +127,7 @@ void loop() {
   if (rev && !lastR && canShift && currentSpeed < 2.0) gearbox.shiftToReverse(true);
   lastR = rev;
 
-  lights.update(can, safety, launchActive, steering.getSteerPercent());
+  lights.update(can, safety, launchActive, steering.getAbglichSteerPercent());
   sendTelemetry(safety, can, gasPedal, gearbox.getGear(), launchActive);
   updateDisplay(gearbox.getGear(), safety, can, virtualGear.getGear(), can.chassisDataValid);
 }

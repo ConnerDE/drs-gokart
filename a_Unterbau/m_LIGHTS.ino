@@ -56,10 +56,10 @@ public:
       case 1: {
         CRGB color;
         switch (driveMode) {
-          case 0: color = CRGB(0, 255, 0); break;
-          case 1: color = CRGB(0, 0, 255); break;
-          case 2: color = CRGB(255, 0, 0); break;
-          case 3: color = CRGB(128, 0, 128); break;
+          case DRIVE_MODE_NORMAL: color = CRGB(0, 255, 0); break;
+          case DRIVE_MODE_SPORT: color = CRGB(0, 0, 255); break;
+          case DRIVE_MODE_OFFROAD: color = CRGB(255, 140, 0); break;
+          case DRIVE_MODE_RACE: color = CRGB(128, 0, 128); break;
           default: color = CRGB::White; break;
         }
         fill_solid(leds, count, color);
@@ -167,7 +167,7 @@ public:
       fill_solid(ledsHeckHL, NUM_HECK_HL, CRGB::Black);
       fill_solid(ledsHeckHR, NUM_HECK_HR, CRGB::Black);
       fill_solid(ledsSpoiler, NUM_SPOILER, CRGB::Black);
-      mcp2.digitalWrite(MCP2_ABBLEND, LOW);
+      if (i2cStatus & (1 << 1)) mcp2.digitalWrite(MCP2_ABBLEND, LOW);
       FastLED.show();
       lastDataValid = false;
       return;
@@ -175,7 +175,7 @@ public:
     lastDataValid = can.dataValid;
     if (!can.dataValid) return;
 
-    mcp2.digitalWrite(MCP2_ABBLEND, (can.lightMode == 1) ? HIGH : LOW);
+    if (i2cStatus & (1 << 1)) mcp2.digitalWrite(MCP2_ABBLEND, (can.lightMode == 1) ? HIGH : LOW);
 
     static unsigned long lastBlink = 0;
     static bool blinkState = false;
@@ -190,7 +190,7 @@ public:
     bool right = blinkerRightState;
     bool brake = safety.brakePressed;
 
-    mcp2.digitalWrite(MCP2_TRANS3, brake ? HIGH : LOW);
+    if (i2cStatus & (1 << 1)) mcp2.digitalWrite(MCP2_TRANS3, brake ? HIGH : LOW);
 
     // FRONT LEDS (Launch Control Bar)
     if (launchActive) {

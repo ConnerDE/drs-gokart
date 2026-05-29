@@ -2,6 +2,9 @@
 /* ==================== DISPLAY ==================== */
 void updateDisplay(int8_t physicalGear, SafetyModule& safety, CanReceiver& can,
                    int8_t virtualGear, bool showVirtualGear) {
+  if (!USE_OLED_DISPLAY) return;
+  if (!(i2cStatus & (1 << 4))) return;
+
   static unsigned long lastUpdate = 0;
   if (millis() - lastUpdate < 100) return;
   lastUpdate = millis();
@@ -55,14 +58,17 @@ void updateDisplay(int8_t physicalGear, SafetyModule& safety, CanReceiver& can,
     }
     display.setCursor(60, 35);
     switch(can.driveMode) {
-      case 0: display.print("NRML"); break;
-      case 1: display.print("SPRT"); break;
-      case 2: display.print("S+"); break;
-      case 3: display.print("RACE"); break;
+      case DRIVE_MODE_NORMAL: display.print("NRML"); break;
+      case DRIVE_MODE_SPORT: display.print("SPRT"); break;
+      case DRIVE_MODE_OFFROAD: display.print("OFFR"); break;
+      case DRIVE_MODE_RACE: display.print("RACE"); break;
     }
-    if (can.chassisDataValid && can.asrActive) {
+    if (safety.hydPumpOverTemp) {
       display.setCursor(60, 45);
-      display.print("ASR");
+      display.print("HYD");
+    } else if (can.chassisDataValid && can.slipLampActive()) {
+      display.setCursor(60, 45);
+      display.print("SLIP");
     }
     if (can.driftMode) {
       display.setCursor(90, 45);

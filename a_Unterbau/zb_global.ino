@@ -19,3 +19,5 @@ GasPedal gasPedal;
 LightsManager lights;
 VirtualGearDetector virtualGear;
 SteeringInput steering;
+CurrentSensor currentSensor;
+EGTMax31855 egtSensor;
